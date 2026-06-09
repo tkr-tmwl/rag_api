@@ -26,10 +26,10 @@ jobs:
         python-version: ${{ env.PYTHON_VERSION }}
 
     # ステップ3: 依存関係をインストール
-    - name: Install dependencies
+    - name: Install dependencies into package folder
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
+        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
     # ステップ4: テストを実行（オプション）
     - name: Run tests
