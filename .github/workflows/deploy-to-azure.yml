@@ -5,46 +5,48 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+concurrency:
+  group: deploy-azure-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  PYTHON_VERSION: '3.12'
+  PYTHON_VERSION: "3.12"
   AZURE_WEBAPP_NAME: ${{ secrets.AZURE_WEBAPP_NAME }}
   AZURE_RESOURCE_GROUP: ${{ secrets.AZURE_RESOURCE_GROUP }}
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 90
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python ${{ env.PYTHON_VERSION }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ env.PYTHON_VERSION }}
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
-    # 依存パッケージを .python_packages フォルダにインストール（zip に含める）
-    - name: Install dependencies into package folder
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt --target=".python_packages/lib/site-packages"
+      - name: Install dependencies into package folder
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt --target=".python_packages/lib/site-packages"
 
-    # # テスト（任意）
-    # - name: Run tests
-    #   run: |
-    #     pip install -r test_requirements.txt
-    #     pytest tests/ -v
-    #   continue-on-error: true
+      # - name: Run tests
+      #   run: |
+      #     pip install -r test_requirements.txt
+      #     pytest tests/ -v
+      #   continue-on-error: true
 
-    # デプロイ（.python_packages ごと zip に含めて送る）
-    - name: Deploy to Azure Web App
-      uses: azure/webapps-deploy@v2
-      with:
-        app-name: ${{ env.AZURE_WEBAPP_NAME }}
-        package: '.'
-        publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v2
+        with:
+          app-name: ${{ env.AZURE_WEBAPP_NAME }}
+          publish-profile: ${{ secrets.AZURE_PUBLISH_PROFILE }}
+          package: "."
 
-    - name: Deployment Summary
-      run: |
-        echo "✅ Deployment completed"
-        echo "App URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
+      - name: Deployment Summary
+        run: |
+          echo "Deployment completed"
+          echo "App URL: https://${{ env.AZURE_WEBAPP_NAME }}.azurewebsites.net"
