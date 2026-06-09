@@ -39,10 +39,10 @@ jobs:
       continue-on-error: true  # テスト失敗時もデプロイを続行
 
     # ステップ5: Azureにログイン
-    - name: Azure Login
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    # - name: Azure Login
+    #   uses: azure/login@v1
+    #   with:
+    #     creds: ${{ secrets.AZURE_CREDENTIALS }}
 
     # ステップ6: App Serviceにデプロイ
     - name: Deploy to Azure Web App
