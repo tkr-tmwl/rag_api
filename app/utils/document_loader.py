@@ -219,6 +219,7 @@ def remove_non_utf8(text: str) -> str:
 def process_documents(documents: List[Document]) -> str:
     processed_text = ""
     last_page: Optional[int] = None
+    last_document_page: Optional[int] = None
     doc_basename = ""
 
     for doc in documents:
@@ -229,16 +230,22 @@ def process_documents(documents: List[Document]) -> str:
     processed_text += f"{doc_basename}\n"
 
     for doc in documents:
+        # AI Genarated Code Start
         current_page = doc.metadata.get("page")
-        if current_page and current_page != last_page:
-            processed_text += f"\n# PAGE {doc.metadata['page']}\n\n"
+        if current_page is not None and current_page != last_page:
+            processed_text += f"\n# PAGE {current_page + 1}\n\n"
             last_page = current_page
 
         new_content = doc.page_content
-        if processed_text.endswith(new_content[:CHUNK_OVERLAP]):
+        if (
+            current_page == last_document_page
+            and processed_text.endswith(new_content[:CHUNK_OVERLAP])
+        ):
             processed_text += new_content[CHUNK_OVERLAP:]
         else:
             processed_text += new_content
+        last_document_page = current_page
+        # End of AI
 
     return processed_text.strip()
 

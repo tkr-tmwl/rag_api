@@ -1,5 +1,6 @@
 # app/routes/document_routes.py
 import os
+import re
 import uuid
 from pathlib import Path
 import hashlib
@@ -84,6 +85,7 @@ from app.models import (
     QueryRequestBody,
     DocumentResponse,
     QueryMultipleBody,
+    DocumentContextRequest,
 )
 from app.services.vector_store.async_pg_vector import AsyncPgVector
 from app.utils.document_loader import (
@@ -95,6 +97,47 @@ from app.utils.document_loader import (
 from app.utils.health import is_health_ok
 
 router = APIRouter()
+
+
+# AI Genarated Code Start
+SECTION_HEADING_PATTERN = re.compile(
+    r"(?im)^\s*(?:#{1,6}\s+|第\s*)?(?P<index>\d+)\s*(?:章|chapter)\s*[:：.\-]?\s*(?P<title>.*)$"
+)
+MARKDOWN_HEADING_PATTERN = re.compile(r"(?m)^\s*#{1,6}\s+(?P<title>.+?)\s*$")
+PAGE_REQUEST_PATTERN = re.compile(r"(?i)(?<!\d)(?P<number>\d+)\s*(?:ページ|page)")
+SECTION_REQUEST_PATTERN = re.compile(
+    r"(?i)(?:第\s*)?(?P<number>\d+)\s*(?:章|chapter)"
+)
+
+
+def _get_section_metadata(
+    page_content: str, current_section_index: Optional[int]
+) -> tuple[Optional[int], Optional[str]]:
+    """Extract an explicit chapter number or a sequential Markdown heading."""
+    chapter_match = SECTION_HEADING_PATTERN.search(page_content)
+    if chapter_match:
+        return int(chapter_match.group("index")), chapter_match.group("title").strip()
+
+    heading_match = MARKDOWN_HEADING_PATTERN.search(page_content)
+    if heading_match:
+        next_index = 1 if current_section_index is None else current_section_index + 1
+        return next_index, heading_match.group("title").strip()
+
+    return current_section_index, None
+
+
+def _get_structural_query_target(query: str) -> Optional[tuple[str, int]]:
+    """Identify explicit page or chapter requests without changing semantic queries."""
+    page_match = PAGE_REQUEST_PATTERN.search(query)
+    if page_match:
+        return "page_number", int(page_match.group("number"))
+
+    section_match = SECTION_REQUEST_PATTERN.search(query)
+    if section_match:
+        return "section_index", int(section_match.group("number"))
+
+    return None
+# End of AI
 
 
 def calculate_num_batches(total: int, batch_size: int) -> int:
@@ -376,19 +419,36 @@ async def query_embeddings_by_file_id(
     authorized_documents = []
 
     try:
-        embedding = get_cached_query_embedding(body.query)
-
-        if isinstance(vector_store, AsyncPgVector):
-            documents = await vector_store.asimilarity_search_with_score_by_vector(
-                embedding,
-                k=body.k,
-                filter={"file_id": {"$eq": body.file_id}},
-                executor=request.app.state.thread_pool,
-            )
+        # AI Genarated Code Start
+        structural_target = _get_structural_query_target(body.query)
+        if structural_target:
+            metadata_field, metadata_value = structural_target
+            if isinstance(vector_store, AsyncPgVector):
+                structural_documents = await vector_store.get_documents_by_file_metadata(
+                    body.file_id,
+                    metadata_field,
+                    metadata_value,
+                    executor=request.app.state.thread_pool,
+                )
+            else:
+                structural_documents = vector_store.get_documents_by_file_metadata(
+                    body.file_id, metadata_field, metadata_value
+                )
+            documents = [(document, 0.0) for document in structural_documents]
         else:
-            documents = vector_store.similarity_search_with_score_by_vector(
-                embedding, k=body.k, filter={"file_id": {"$eq": body.file_id}}
-            )
+            embedding = get_cached_query_embedding(body.query)
+            if isinstance(vector_store, AsyncPgVector):
+                documents = await vector_store.asimilarity_search_with_score_by_vector(
+                    embedding,
+                    k=body.k,
+                    filter={"file_id": {"$eq": body.file_id}},
+                    executor=request.app.state.thread_pool,
+                )
+            else:
+                documents = vector_store.similarity_search_with_score_by_vector(
+                    embedding, k=body.k, filter={"file_id": {"$eq": body.file_id}}
+                )
+        # End of AI
 
         documents = _apply_distance_threshold(documents)
 
@@ -439,6 +499,55 @@ async def query_embeddings_by_file_id(
             traceback.format_exc(),
         )
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# AI Genarated Code Start
+@router.post("/documents/context")
+async def load_document_structural_context(
+    body: DocumentContextRequest, request: Request
+):
+    """Return all source-ordered chunks for one requested page or section."""
+    user_authorized = get_user_id(request, body.entity_id)
+    metadata_field = "page_number" if body.page_number is not None else "section_index"
+    metadata_value = (
+        body.page_number if body.page_number is not None else body.section_index
+    )
+
+    try:
+        if isinstance(vector_store, AsyncPgVector):
+            documents = await vector_store.get_documents_by_file_metadata(
+                body.file_id,
+                metadata_field,
+                metadata_value,
+                executor=request.app.state.thread_pool,
+            )
+        else:
+            documents = vector_store.get_documents_by_file_metadata(
+                body.file_id, metadata_field, metadata_value
+            )
+
+        if not documents:
+            raise HTTPException(status_code=404, detail="Requested content was not found")
+        if any(
+            doc.metadata.get("user_id") not in (None, user_authorized)
+            for doc in documents
+        ):
+            raise HTTPException(status_code=403, detail="Access to document is denied")
+
+        return {
+            "file_id": body.file_id,
+            metadata_field: metadata_value,
+            "documents": [
+                {"page_content": doc.page_content, "metadata": doc.metadata}
+                for doc in documents
+            ],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed structural context lookup for file %s: %s", body.file_id, exc)
+        raise HTTPException(status_code=500, detail="Failed to load document context")
+# End of AI
 
 
 async def _process_documents_async_pipeline(
@@ -710,19 +819,40 @@ def _prepare_documents_sync(
         for doc in documents:
             doc.page_content = clean_text(doc.page_content)
 
-    # Preparing documents with page content and metadata for insertion.
-    return [
-        Document(
-            page_content=doc.page_content,
-            metadata={
-                "file_id": file_id,
-                "user_id": user_id,
-                "digest": generate_digest(doc.page_content),
-                **(doc.metadata or {}),
-            },
+    # AI Genarated Code Start
+    # Keep a deterministic source order and normalize PDF's zero-based page index.
+    prepared_documents = []
+    # AI Genarated Code Start
+    current_section_index: Optional[int] = None
+    current_section_title: Optional[str] = None
+    for chunk_index, doc in enumerate(documents):
+        current_section_index, section_title = _get_section_metadata(
+            doc.page_content, current_section_index
         )
-        for doc in documents
-    ]
+        if section_title:
+            current_section_title = section_title
+        metadata = {
+            **(doc.metadata or {}),
+            "file_id": file_id,
+            "user_id": user_id,
+            "digest": generate_digest(doc.page_content),
+            "chunk_index": chunk_index,
+        }
+        page_index = doc.metadata.get("page") if doc.metadata else None
+        if isinstance(page_index, int) and page_index >= 0:
+            metadata["page_index"] = page_index
+            metadata["page_number"] = page_index + 1
+        if current_section_index is not None:
+            metadata["section_index"] = current_section_index
+        if current_section_title:
+            metadata["section_title"] = current_section_title
+
+        prepared_documents.append(
+            Document(page_content=doc.page_content, metadata=metadata)
+        )
+
+    return prepared_documents
+    # End of AI
 
 
 async def store_data_in_vector_db(

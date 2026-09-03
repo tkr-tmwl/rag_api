@@ -53,6 +53,28 @@ async def ensure_vector_indexes():
         """
         )
 
+        # AI Genarated Code Start
+        # Compound expression indexes support deterministic page and section retrieval.
+        await conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_file_page_index
+            ON {table_name} (
+                (cmetadata->>'file_id'),
+                (cmetadata->>'page_index')
+            );
+        """
+        )
+        await conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_file_section_index
+            ON {table_name} (
+                (cmetadata->>'file_id'),
+                (cmetadata->>'section_index')
+            );
+        """
+        )
+        # End of AI
+
         # Migrate cmetadata from JSON to JSONB (idempotent — skipped if already JSONB).
         # Rollback: ALTER TABLE langchain_pg_embedding ALTER COLUMN cmetadata TYPE JSON USING cmetadata::json;
         # NOTE: table name is hardcoded below (not interpolated) to avoid SQL injection.

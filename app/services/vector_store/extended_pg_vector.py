@@ -2,7 +2,7 @@ import os
 import time
 import logging
 from typing import Optional, Any, Dict, List, Union
-from sqlalchemy import event
+from sqlalchemy import Integer, cast, event
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 from sqlalchemy.engine import Engine
@@ -197,6 +197,34 @@ class ExtendedPgVector(PGVector):
                 for result in results
                 if result.custom_id in ids
             ]
+
+    # AI Genarated Code Start
+    def get_documents_by_file_metadata(
+        self, file_id: str, metadata_field: str, metadata_value: str | int
+    ) -> list[Document]:
+        """Return chunks for one metadata value in their original source order."""
+        if metadata_field not in {"page_number", "section_index"}:
+            raise ValueError(f"Unsupported structural metadata field: {metadata_field}")
+
+        with Session(self._bind) as session:
+            chunk_index = cast(
+                self.EmbeddingStore.cmetadata["chunk_index"].astext, Integer
+            )
+            results = (
+                session.query(self.EmbeddingStore)
+                .filter(self.EmbeddingStore.custom_id == file_id)
+                .filter(
+                    self.EmbeddingStore.cmetadata[metadata_field].astext
+                    == str(metadata_value)
+                )
+                .order_by(chunk_index, self.EmbeddingStore.uuid)
+                .all()
+            )
+            return [
+                Document(page_content=result.document, metadata=result.cmetadata or {})
+                for result in results
+            ]
+    # End of AI
 
     def _delete_multiple(
         self, ids: Optional[list[str]] = None, collection_only: bool = False

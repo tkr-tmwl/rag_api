@@ -52,6 +52,23 @@ async def test_get_documents_by_ids_passes_ids(store):
 
 
 @pytest.mark.asyncio
+async def test_get_documents_by_file_metadata_passes_structural_filter(store):
+    docs = [Document(page_content="page", metadata={"page_number": 3})]
+
+    # AI Genarated Code Start
+    with patch.object(
+        ExtendedPgVector, "get_documents_by_file_metadata", return_value=docs
+    ) as mock:
+        result = await store.get_documents_by_file_metadata(
+            "file-1", "page_number", 3
+        )
+
+    mock.assert_called_once_with("file-1", "page_number", 3)
+    assert result == docs
+    # End of AI
+
+
+@pytest.mark.asyncio
 async def test_delete_passes_args(store):
     with patch.object(ExtendedPgVector, "_delete_multiple") as mock:
         await store.delete(ids=["id1"], collection_only=True)

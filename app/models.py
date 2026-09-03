@@ -1,7 +1,7 @@
 # app/models.py
 import hashlib
 from enum import Enum
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional, List
 
 
@@ -42,3 +42,18 @@ class QueryMultipleBody(BaseModel):
     query: str
     file_ids: List[str]
     k: int = 4
+
+
+# AI Genarated Code Start
+class DocumentContextRequest(BaseModel):
+    """Request a deterministically selected page or section from one file."""
+
+    file_id: str
+    page_number: Optional[int] = Field(default=None, ge=1)
+    section_index: Optional[int] = Field(default=None, ge=1)
+    entity_id: Optional[str] = None
+
+    def model_post_init(self, __context) -> None:
+        if (self.page_number is None) == (self.section_index is None):
+            raise ValueError("Specify exactly one of page_number or section_index")
+# End of AI

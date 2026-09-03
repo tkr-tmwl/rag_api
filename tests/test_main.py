@@ -71,6 +71,29 @@ def override_vector_store(monkeypatch):
         AsyncPgVector, "get_documents_by_ids", dummy_get_documents_by_ids
     )
 
+    # AI Genarated Code Start
+    async def dummy_get_documents_by_file_metadata(
+        self, file_id, metadata_field, metadata_value, executor=None
+    ):
+        return [
+            Document(
+                page_content="Requested page content",
+                metadata={
+                    "file_id": file_id,
+                    "user_id": "testuser",
+                    metadata_field: metadata_value,
+                    "chunk_index": 0,
+                },
+            )
+        ]
+
+    monkeypatch.setattr(
+        AsyncPgVector,
+        "get_documents_by_file_metadata",
+        dummy_get_documents_by_file_metadata,
+    )
+    # End of AI
+
     # Override embedding_function with a dummy that doesn't call OpenAI
     class DummyEmbedding:
         def embed_query(self, query):
@@ -171,6 +194,26 @@ def test_query_embeddings_by_file_id(auth_headers):
     if json_data:
         doc = json_data[0][0]
         assert doc["page_content"] == "Queried content"
+
+
+def test_query_embeddings_by_explicit_page_returns_structural_context(auth_headers):
+    # AI Genarated Code Start
+    response = client.post(
+        "/query",
+        json={
+            "query": "3ページの内容を取得してください",
+            "file_id": "testid1",
+            "entity_id": "testuser",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    document, score = response.json()[0]
+    assert document["page_content"] == "Requested page content"
+    assert document["metadata"]["page_number"] == 3
+    assert score == 0.0
+    # End of AI
 
 
 def test_embed_local_file(tmp_path, auth_headers, monkeypatch):

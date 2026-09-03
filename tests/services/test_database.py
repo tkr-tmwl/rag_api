@@ -84,3 +84,17 @@ def test_ensure_vector_indexes_gin_index(monkeypatch):
     gin_stmt = next(s for s in conn.statements if "ix_cmetadata_gin" in s)
     assert "jsonb_path_ops" in gin_stmt
     assert "USING gin" in gin_stmt
+
+
+def test_ensure_vector_indexes_structural_indexes(monkeypatch):
+    conn = _run_with_captured_conn(monkeypatch)
+
+    # AI Genarated Code Start
+    page_stmt = next(s for s in conn.statements if "file_page_index" in s)
+    section_stmt = next(s for s in conn.statements if "file_section_index" in s)
+
+    assert "cmetadata->>'file_id'" in page_stmt
+    assert "cmetadata->>'page_index'" in page_stmt
+    assert "cmetadata->>'file_id'" in section_stmt
+    assert "cmetadata->>'section_index'" in section_stmt
+    # End of AI

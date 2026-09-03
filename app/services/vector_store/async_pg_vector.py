@@ -58,6 +58,24 @@ class AsyncPgVector(ExtendedPgVector):
         executor = executor or self._get_thread_pool()
         return await self._run_in_executor(executor, super().get_documents_by_ids, ids)
 
+    # AI Genarated Code Start
+    async def get_documents_by_file_metadata(
+        self,
+        file_id: str,
+        metadata_field: str,
+        metadata_value: str | int,
+        executor=None,
+    ) -> list[Document]:
+        executor = executor or self._get_thread_pool()
+        return await self._run_in_executor(
+            executor,
+            super().get_documents_by_file_metadata,
+            file_id,
+            metadata_field,
+            metadata_value,
+        )
+    # End of AI
+
     async def delete(
         self,
         ids: Optional[list[str]] = None,

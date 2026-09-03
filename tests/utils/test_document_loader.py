@@ -46,6 +46,29 @@ def test_process_documents():
     assert "# PAGE 2" in processed
 
 
+def test_process_documents_preserves_first_pdf_page_and_page_boundary_content(monkeypatch):
+    monkeypatch.setattr("app.utils.document_loader.CHUNK_OVERLAP", 3)
+    docs = [
+        Document(
+            page_content="Page zero content",
+            metadata={"source": "document.pdf", "page": 0},
+        ),
+        Document(
+            page_content="ent Page two content",
+            metadata={"source": "document.pdf", "page": 1},
+        ),
+    ]
+
+    # AI Genarated Code Start
+    processed = process_documents(docs)
+
+    assert "# PAGE 1" in processed
+    assert "# PAGE 2" in processed
+    assert "Page zero content" in processed
+    assert "ent Page two content" in processed
+    # End of AI
+
+
 def test_safe_pdf_loader_class():
     """Test that SafePyPDFLoader class can be instantiated"""
     from app.utils.document_loader import SafePyPDFLoader
