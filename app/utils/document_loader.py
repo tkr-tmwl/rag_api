@@ -21,7 +21,6 @@ from langchain_community.document_loaders import (
     UnstructuredMarkdownLoader,
     UnstructuredXMLLoader,
     UnstructuredRSTLoader,
-    UnstructuredExcelLoader,
     UnstructuredPowerPointLoader,
 )
 
@@ -172,7 +171,9 @@ def get_loader(
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ]:
-        loader = UnstructuredExcelLoader(filepath)
+        # AI Genarated Code Start
+        loader = ExcelSheetLoader(filepath, file_ext)
+        # End of AI
     elif file_ext == "json" or file_content_type == "application/json":
         loader = TextLoader(filepath, autodetect_encoding=True)
     elif file_ext in known_source_ext or (
@@ -253,6 +254,99 @@ def process_documents(documents: List[Document]) -> str:
         # End of AI
 
     return processed_text.strip()
+
+
+# AI Genarated Code Start
+class ExcelSheetLoader:
+    """Load each Excel worksheet into a distinct document with stable metadata."""
+
+    def __init__(self, filepath: str, file_ext: str):
+        self.filepath = filepath
+        self.file_ext = file_ext
+        self._temp_filepath = None
+
+    @staticmethod
+    def _format_row(values) -> str:
+        last_value_index = -1
+        formatted_values = []
+        for index, value in enumerate(values):
+            text = "" if value is None else str(value)
+            formatted_values.append(text)
+            if text:
+                last_value_index = index
+        return "\t".join(formatted_values[: last_value_index + 1])
+
+    def _load_xlsx(self) -> Iterator[Document]:
+        from openpyxl import load_workbook
+
+        values_workbook = load_workbook(self.filepath, data_only=True, read_only=True)
+        formulas_workbook = load_workbook(
+            self.filepath, data_only=False, read_only=True
+        )
+        try:
+            for sheet_index, sheet_name in enumerate(values_workbook.sheetnames):
+                values_sheet = values_workbook[sheet_name]
+                formulas_sheet = formulas_workbook[sheet_name]
+                rows = []
+                for values_row, formulas_row in zip(
+                    values_sheet.iter_rows(values_only=True),
+                    formulas_sheet.iter_rows(values_only=True),
+                ):
+                    values = [
+                        value if value is not None else formula
+                        for value, formula in zip(values_row, formulas_row)
+                    ]
+                    row_text = self._format_row(values)
+                    if row_text:
+                        rows.append(row_text)
+                if rows:
+                    yield Document(
+                        page_content="\n".join(rows),
+                        metadata={
+                            "source": self.filepath,
+                            "sheet_index": sheet_index,
+                            "sheet_number": sheet_index + 1,
+                            "sheet_name": sheet_name,
+                        },
+                    )
+        finally:
+            values_workbook.close()
+            formulas_workbook.close()
+
+    def _load_xls(self) -> Iterator[Document]:
+        import xlrd
+
+        workbook = xlrd.open_workbook(self.filepath, on_demand=True)
+        try:
+            for sheet_index, sheet_name in enumerate(workbook.sheet_names()):
+                sheet = workbook.sheet_by_index(sheet_index)
+                rows = []
+                for row_index in range(sheet.nrows):
+                    row_text = self._format_row(sheet.row_values(row_index))
+                    if row_text:
+                        rows.append(row_text)
+                if rows:
+                    yield Document(
+                        page_content="\n".join(rows),
+                        metadata={
+                            "source": self.filepath,
+                            "sheet_index": sheet_index,
+                            "sheet_number": sheet_index + 1,
+                            "sheet_name": sheet_name,
+                        },
+                    )
+        finally:
+            workbook.release_resources()
+
+    def lazy_load(self) -> Iterator[Document]:
+        if self.file_ext == "xlsx":
+            yield from self._load_xlsx()
+        else:
+            yield from self._load_xls()
+
+    def load(self) -> List[Document]:
+        return list(self.lazy_load())
+# End of AI
 
 
 # AI Genarated Code Start

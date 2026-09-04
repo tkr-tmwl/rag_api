@@ -130,6 +130,12 @@ PAGE_REQUEST_PATTERN = re.compile(r"(?i)(?<!\d)(?P<number>\d+)\s*(?:ページ|pa
 SLIDE_REQUEST_PATTERN = re.compile(
     r"(?i)(?:スライド|slide)\s*(?P<number>\d+)|(?<!\d)(?P<suffix_number>\d+)\s*(?:枚目|スライド)"
 )
+SHEET_NUMBER_REQUEST_PATTERN = re.compile(
+    r"(?i)(?:第\s*)?(?P<number>\d+)\s*(?:シート|sheet)(?:目)?|(?:シート|sheet)\s*(?P<prefix_number>\d+)"
+)
+SHEET_NAME_REQUEST_PATTERN = re.compile(
+    r"(?i)(?:シート|sheet)\s*[「\"'](?P<quoted_name>[^」\"']+)[」\"']|(?P<suffix_name>[^\s「」\"']+)\s*(?:シート|sheet)(?:の)?"
+)
 SECTION_REQUEST_PATTERN = re.compile(
     r"(?i)(?:第\s*)?(?P<number>\d+)\s*(?:章|chapter)"
 )
@@ -202,7 +208,7 @@ def _get_section_metadata(
     return current_section_index, None, None
 
 
-def _get_structural_query_target(query: str) -> Optional[tuple[str, int]]:
+def _get_structural_query_target(query: str) -> Optional[tuple[str, str | int]]:
     """Identify explicit page or chapter requests without changing semantic queries."""
     # AI Genarated Code Start
     slide_match = SLIDE_REQUEST_PATTERN.search(query)
@@ -211,6 +217,21 @@ def _get_structural_query_target(query: str) -> Optional[tuple[str, int]]:
             "suffix_number"
         )
         return "slide_number", int(slide_number)
+    # End of AI
+    # AI Genarated Code Start
+    sheet_number_match = SHEET_NUMBER_REQUEST_PATTERN.search(query)
+    if sheet_number_match:
+        sheet_number = sheet_number_match.group("number") or sheet_number_match.group(
+            "prefix_number"
+        )
+        return "sheet_number", int(sheet_number)
+
+    sheet_name_match = SHEET_NAME_REQUEST_PATTERN.search(query)
+    if sheet_name_match:
+        sheet_name = sheet_name_match.group("quoted_name") or sheet_name_match.group(
+            "suffix_name"
+        )
+        return "sheet_name", sheet_name
     # End of AI
     page_match = PAGE_REQUEST_PATTERN.search(query)
     if page_match:
@@ -598,6 +619,10 @@ async def load_document_structural_context(
         metadata_field, metadata_value = "page_number", body.page_number
     elif body.slide_number is not None:
         metadata_field, metadata_value = "slide_number", body.slide_number
+    elif body.sheet_number is not None:
+        metadata_field, metadata_value = "sheet_number", body.sheet_number
+    elif body.sheet_name is not None:
+        metadata_field, metadata_value = "sheet_name", body.sheet_name
     else:
         metadata_field, metadata_value = "section_index", body.section_index
     # End of AI

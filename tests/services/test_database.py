@@ -92,9 +92,13 @@ def test_ensure_vector_indexes_structural_indexes(monkeypatch):
     # AI Genarated Code Start
     page_stmt = next(s for s in conn.statements if "file_page_index" in s)
     section_stmt = next(s for s in conn.statements if "file_section_index" in s)
+    sheet_number_stmt = next(s for s in conn.statements if "file_sheet_number" in s)
+    sheet_name_stmt = next(s for s in conn.statements if "file_sheet_name" in s)
 
     assert "cmetadata->>'file_id'" in page_stmt
     assert "cmetadata->>'page_index'" in page_stmt
     assert "cmetadata->>'file_id'" in section_stmt
     assert "cmetadata->>'section_index'" in section_stmt
+    assert "cmetadata->>'sheet_number'" in sheet_number_stmt
+    assert "cmetadata->>'sheet_name'" in sheet_name_stmt
     # End of AI

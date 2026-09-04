@@ -33,6 +33,37 @@ def test_get_loader_text(tmp_path):
 
 
 # AI Genarated Code Start
+def test_excel_sheet_loader_preserves_sheet_order_names_and_hidden_sheets(tmp_path):
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    workbook.active.title = "売上実績"
+    workbook.active.append(["売上", 100])
+    hidden_sheet = workbook.create_sheet("非表示")
+    hidden_sheet.sheet_state = "hidden"
+    hidden_sheet.append(["内部", 200])
+    workbook.create_sheet("予算").append(["予算", 300])
+    xlsx_path = tmp_path / "report.xlsx"
+    workbook.save(xlsx_path)
+
+    loader, _, _ = get_loader(
+        "report.xlsx",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        str(xlsx_path),
+    )
+    documents = loader.load()
+
+    assert [document.metadata["sheet_number"] for document in documents] == [1, 2, 3]
+    assert [document.metadata["sheet_name"] for document in documents] == [
+        "売上実績",
+        "非表示",
+        "予算",
+    ]
+    assert "内部\t200" in documents[1].page_content
+# End of AI
+
+
+# AI Genarated Code Start
 def test_docx_loader_preserves_explicit_page_breaks(tmp_path):
     docx_path = tmp_path / "pages.docx"
     document_xml = """<?xml version="1.0" encoding="UTF-8"?>
@@ -326,7 +357,7 @@ def test_get_loader_raw_text_leaves_pdf_alone(tmp_path):
         ("doc.pdf", "SafePyPDFLoader"),
         ("report.docx", "Docx2txtLoader"),
         ("book.epub", "UnstructuredEPubLoader"),
-        ("data.xlsx", "UnstructuredExcelLoader"),
+        ("data.xlsx", "ExcelSheetLoader"),
         ("slides.pptx", "UnstructuredPowerPointLoader"),
     ],
 )

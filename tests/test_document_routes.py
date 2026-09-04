@@ -103,4 +103,22 @@ def test_get_structural_query_target_recognizes_page_and_slide_requests(
     # AI Genarated Code Start
     assert _get_structural_query_target(query) == expected
     # End of AI
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("2シート目の内容を取得して", ("sheet_number", 2)),
+        ("第3シートの内容", ("sheet_number", 3)),
+        ("シート 4 の内容", ("sheet_number", 4)),
+        ("sheet 5 content", ("sheet_number", 5)),
+        ("売上実績シートの内容", ("sheet_name", "売上実績")),
+        ('シート「非表示」の内容', ("sheet_name", "非表示")),
+        ('sheet "Sales" content', ("sheet_name", "Sales")),
+    ],
+)
+def test_get_structural_query_target_recognizes_sheet_requests(query, expected):
+    # AI Genarated Code Start
+    assert _get_structural_query_target(query) == expected
+    # End of AI
 # End of AI

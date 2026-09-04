@@ -82,6 +82,24 @@ async def ensure_vector_indexes():
             );
         """
         )
+        await conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_file_sheet_number
+            ON {table_name} (
+                (cmetadata->>'file_id'),
+                (cmetadata->>'sheet_number')
+            );
+        """
+        )
+        await conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_file_sheet_name
+            ON {table_name} (
+                (cmetadata->>'file_id'),
+                (cmetadata->>'sheet_name')
+            );
+        """
+        )
         # End of AI
 
         # Migrate cmetadata from JSON to JSONB (idempotent — skipped if already JSONB).

@@ -55,6 +55,8 @@ class DocumentContextRequest(BaseModel):
     page_number: Optional[int] = Field(default=None, ge=1)
     # AI Genarated Code Start
     slide_number: Optional[int] = Field(default=None, ge=1)
+    sheet_number: Optional[int] = Field(default=None, ge=1)
+    sheet_name: Optional[str] = Field(default=None, min_length=1)
     # End of AI
     section_index: Optional[int] = Field(default=None, ge=1)
     entity_id: Optional[str] = None
@@ -63,11 +65,17 @@ class DocumentContextRequest(BaseModel):
         # AI Genarated Code Start
         requested_scopes = sum(
             value is not None
-            for value in (self.page_number, self.slide_number, self.section_index)
+            for value in (
+                self.page_number,
+                self.slide_number,
+                self.section_index,
+                self.sheet_number,
+                self.sheet_name,
+            )
         )
         if requested_scopes != 1:
             raise ValueError(
-                "Specify exactly one of page_number, slide_number, or section_index"
+                "Specify exactly one of page_number, slide_number, section_index, sheet_number, or sheet_name"
             )
         # End of AI
 # End of AI
