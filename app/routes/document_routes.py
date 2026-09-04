@@ -1,6 +1,9 @@
 # app/routes/document_routes.py
 import os
 import re
+# AI Genarated Code Start
+import unicodedata
+# End of AI
 import uuid
 from pathlib import Path
 import hashlib
@@ -101,7 +104,26 @@ router = APIRouter()
 
 # AI Genarated Code Start
 SECTION_HEADING_PATTERN = re.compile(
-    r"(?im)^\s*(?:#{1,6}\s+|第\s*)?(?P<index>\d+)\s*(?:章|chapter)\s*[:：.\-]?\s*(?P<title>.*)$"
+    r"""(?im)
+    ^[\t ]*(?:\#{1,6}[\t ]+)?
+    (?:
+        (?P<unit_label>
+            第?[\t ]*(?P<unit_number>\d+|[〇零一二三四五六七八九十百千万]+)[\t ]*
+            (?P<unit>編|章|節|項|款|目|条)
+        )
+        |
+        (?P<enumerator>
+            その[\t ]*(?:\d+|[〇零一二三四五六七八九十百千万]+)
+            |\d+(?:\.\d+)*
+            |[〇零一二三四五六七八九十百千万]+
+            |\([A-Za-z]\)|\([IVXLCDMivxlcdm]+\)
+            |[IVXLCDMivxlcdm]+|[A-Za-z]
+        )
+        [.．、。)]?
+    )
+    [\t ]+(?P<title>\S.*?)[\t ]*$
+    """,
+    re.VERBOSE,
 )
 MARKDOWN_HEADING_PATTERN = re.compile(r"(?m)^\s*#{1,6}\s+(?P<title>.+?)\s*$")
 PAGE_REQUEST_PATTERN = re.compile(r"(?i)(?<!\d)(?P<number>\d+)\s*(?:ページ|page)")
@@ -110,20 +132,71 @@ SECTION_REQUEST_PATTERN = re.compile(
 )
 
 
+KANJI_DIGITS = {
+    "〇": 0,
+    "零": 0,
+    "一": 1,
+    "二": 2,
+    "三": 3,
+    "四": 4,
+    "五": 5,
+    "六": 6,
+    "七": 7,
+    "八": 8,
+    "九": 9,
+}
+KANJI_UNITS = {"十": 10, "百": 100, "千": 1000, "万": 10000}
+
+
+def _parse_kanji_number(value: str) -> Optional[int]:
+    """Convert a Japanese cardinal number such as 十二 or 二千三十 to an integer."""
+    if not value or any(char not in KANJI_DIGITS | KANJI_UNITS for char in value):
+        return None
+
+    total = 0
+    group = 0
+    digit = 0
+    for char in value:
+        if char in KANJI_DIGITS:
+            digit = KANJI_DIGITS[char]
+        elif char == "万":
+            total += (group + digit or 1) * KANJI_UNITS[char]
+            group = 0
+            digit = 0
+        else:
+            group += (digit or 1) * KANJI_UNITS[char]
+            digit = 0
+
+    return total + group + digit
+
+
 def _get_section_metadata(
     page_content: str, current_section_index: Optional[int]
-) -> tuple[Optional[int], Optional[str]]:
-    """Extract an explicit chapter number or a sequential Markdown heading."""
-    chapter_match = SECTION_HEADING_PATTERN.search(page_content)
-    if chapter_match:
-        return int(chapter_match.group("index")), chapter_match.group("title").strip()
-
-    heading_match = MARKDOWN_HEADING_PATTERN.search(page_content)
+) -> tuple[Optional[int], Optional[str], Optional[str]]:
+    """Extract numbered headings and preserve their normalized marker label."""
+    normalized_content = unicodedata.normalize("NFKC", page_content)
+    heading_match = SECTION_HEADING_PATTERN.search(normalized_content)
     if heading_match:
-        next_index = 1 if current_section_index is None else current_section_index + 1
-        return next_index, heading_match.group("title").strip()
+        title = heading_match.group("title").strip()
+        unit_number = heading_match.group("unit_number")
+        if unit_number:
+            section_index = (
+                int(unit_number)
+                if unit_number.isdecimal()
+                else _parse_kanji_number(unit_number)
+            )
+            if section_index is not None:
+                return section_index, title, heading_match.group("unit_label").strip()
 
-    return current_section_index, None
+        next_index = 1 if current_section_index is None else current_section_index + 1
+        return next_index, title, heading_match.group("enumerator").strip()
+
+    markdown_match = MARKDOWN_HEADING_PATTERN.search(normalized_content)
+    if markdown_match:
+        next_index = 1 if current_section_index is None else current_section_index + 1
+        return next_index, markdown_match.group("title").strip(), None
+
+    return current_section_index, None, None
 
 
 def _get_structural_query_target(query: str) -> Optional[tuple[str, int]]:
@@ -825,12 +898,17 @@ def _prepare_documents_sync(
     # AI Genarated Code Start
     current_section_index: Optional[int] = None
     current_section_title: Optional[str] = None
+    current_section_label: Optional[str] = None
     for chunk_index, doc in enumerate(documents):
-        current_section_index, section_title = _get_section_metadata(
-            doc.page_content, current_section_index
-        )
+        (
+            current_section_index,
+            section_title,
+            section_label,
+        ) = _get_section_metadata(doc.page_content, current_section_index)
         if section_title:
             current_section_title = section_title
+        if section_label:
+            current_section_label = section_label
         metadata = {
             **(doc.metadata or {}),
             "file_id": file_id,
@@ -846,6 +924,8 @@ def _prepare_documents_sync(
             metadata["section_index"] = current_section_index
         if current_section_title:
             metadata["section_title"] = current_section_title
+        if current_section_label:
+            metadata["section_label"] = current_section_label
 
         prepared_documents.append(
             Document(page_content=doc.page_content, metadata=metadata)
