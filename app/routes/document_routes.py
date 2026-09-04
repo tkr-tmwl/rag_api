@@ -127,6 +127,9 @@ SECTION_HEADING_PATTERN = re.compile(
 )
 MARKDOWN_HEADING_PATTERN = re.compile(r"(?m)^\s*#{1,6}\s+(?P<title>.+?)\s*$")
 PAGE_REQUEST_PATTERN = re.compile(r"(?i)(?<!\d)(?P<number>\d+)\s*(?:ページ|page)")
+SLIDE_REQUEST_PATTERN = re.compile(
+    r"(?i)(?:スライド|slide)\s*(?P<number>\d+)|(?<!\d)(?P<suffix_number>\d+)\s*(?:枚目|スライド)"
+)
 SECTION_REQUEST_PATTERN = re.compile(
     r"(?i)(?:第\s*)?(?P<number>\d+)\s*(?:章|chapter)"
 )
@@ -201,6 +204,14 @@ def _get_section_metadata(
 
 def _get_structural_query_target(query: str) -> Optional[tuple[str, int]]:
     """Identify explicit page or chapter requests without changing semantic queries."""
+    # AI Genarated Code Start
+    slide_match = SLIDE_REQUEST_PATTERN.search(query)
+    if slide_match:
+        slide_number = slide_match.group("number") or slide_match.group(
+            "suffix_number"
+        )
+        return "slide_number", int(slide_number)
+    # End of AI
     page_match = PAGE_REQUEST_PATTERN.search(query)
     if page_match:
         return "page_number", int(page_match.group("number"))
@@ -508,7 +519,8 @@ async def query_embeddings_by_file_id(
                     body.file_id, metadata_field, metadata_value
                 )
             documents = [(document, 0.0) for document in structural_documents]
-        else:
+
+        if not structural_target or (not documents and body.fallback_to_semantic):
             embedding = get_cached_query_embedding(body.query)
             if isinstance(vector_store, AsyncPgVector):
                 documents = await vector_store.asimilarity_search_with_score_by_vector(
@@ -581,10 +593,14 @@ async def load_document_structural_context(
 ):
     """Return all source-ordered chunks for one requested page or section."""
     user_authorized = get_user_id(request, body.entity_id)
-    metadata_field = "page_number" if body.page_number is not None else "section_index"
-    metadata_value = (
-        body.page_number if body.page_number is not None else body.section_index
-    )
+    # AI Genarated Code Start
+    if body.page_number is not None:
+        metadata_field, metadata_value = "page_number", body.page_number
+    elif body.slide_number is not None:
+        metadata_field, metadata_value = "slide_number", body.slide_number
+    else:
+        metadata_field, metadata_value = "section_index", body.section_index
+    # End of AI
 
     try:
         if isinstance(vector_store, AsyncPgVector):
@@ -916,10 +932,25 @@ def _prepare_documents_sync(
             "digest": generate_digest(doc.page_content),
             "chunk_index": chunk_index,
         }
+        # AI Genarated Code Start
+        source_type = Path(str(metadata.get("source", ""))).suffix.lower().lstrip(
+            "."
+        )
+        if source_type:
+            metadata["source_type"] = source_type
+        if source_type in {"ppt", "pptx"}:
+            slide_number = metadata.get("page_number", metadata.get("page"))
+            if isinstance(slide_number, int) and slide_number >= 1:
+                metadata["slide_index"] = slide_number - 1
+                metadata["slide_number"] = slide_number
+                metadata["page_number"] = slide_number
+        # End of AI
         page_index = doc.metadata.get("page") if doc.metadata else None
-        if isinstance(page_index, int) and page_index >= 0:
+        # AI Genarated Code Start
+        if source_type not in {"ppt", "pptx"} and isinstance(page_index, int) and page_index >= 0:
             metadata["page_index"] = page_index
             metadata["page_number"] = page_index + 1
+        # End of AI
         if current_section_index is not None:
             metadata["section_index"] = current_section_index
         if current_section_title:

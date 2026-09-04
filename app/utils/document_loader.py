@@ -3,6 +3,8 @@
 import os
 import codecs
 import tempfile
+import zipfile
+from xml.etree import ElementTree
 
 from typing import Iterator, List, Optional
 import chardet
@@ -158,11 +160,14 @@ def get_loader(
             loader = UnstructuredMarkdownLoader(filepath)
     elif file_ext == "epub" or file_content_type == "application/epub+zip":
         loader = UnstructuredEPubLoader(filepath)
-    elif file_ext in ["doc", "docx"] or file_content_type in [
-        "application/msword",
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    ]:
+    # AI Genarated Code Start
+    elif file_ext == "docx" or file_content_type == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ):
+        loader = ExplicitPageBreakDocxLoader(filepath)
+    elif file_ext == "doc" or file_content_type == "application/msword":
         loader = Docx2txtLoader(filepath)
+    # End of AI
     elif file_ext in ["xls", "xlsx"] or file_content_type in [
         "application/vnd.ms-excel",
         "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -248,6 +253,72 @@ def process_documents(documents: List[Document]) -> str:
         # End of AI
 
     return processed_text.strip()
+
+
+# AI Genarated Code Start
+class ExplicitPageBreakDocxLoader:
+    """Load DOCX text and preserve only explicit page breaks from OOXML."""
+
+    _WORDPROCESSING_NAMESPACE = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+    _NAMESPACES = {"w": _WORDPROCESSING_NAMESPACE}
+
+    def __init__(self, filepath: str):
+        self.filepath = filepath
+        self._temp_filepath = None
+
+    def lazy_load(self) -> Iterator[Document]:
+        paragraph_tag = f"{{{self._WORDPROCESSING_NAMESPACE}}}p"
+        text_tag = f"{{{self._WORDPROCESSING_NAMESPACE}}}t"
+        tab_tag = f"{{{self._WORDPROCESSING_NAMESPACE}}}tab"
+        break_tag = f"{{{self._WORDPROCESSING_NAMESPACE}}}br"
+        rendered_break_tag = f"{{{self._WORDPROCESSING_NAMESPACE}}}lastRenderedPageBreak"
+        type_attribute = f"{{{self._WORDPROCESSING_NAMESPACE}}}type"
+
+        with zipfile.ZipFile(self.filepath) as docx_file:
+            document_xml = docx_file.read("word/document.xml")
+        root = ElementTree.fromstring(document_xml)
+
+        pages: List[List[str]] = [[]]
+        page_break_found = False
+        for paragraph in root.iter(paragraph_tag):
+            paragraph_text: List[str] = []
+            for element in paragraph.iter():
+                if element.tag == text_tag and element.text:
+                    paragraph_text.append(element.text)
+                elif element.tag == tab_tag:
+                    paragraph_text.append("\t")
+                elif element.tag == break_tag and element.get(type_attribute) == "page":
+                    if paragraph_text:
+                        pages[-1].append("".join(paragraph_text))
+                        paragraph_text = []
+                    pages.append([])
+                    page_break_found = True
+                elif element.tag == rendered_break_tag:
+                    if paragraph_text:
+                        pages[-1].append("".join(paragraph_text))
+                        paragraph_text = []
+                    pages.append([])
+                    page_break_found = True
+            if paragraph_text:
+                pages[-1].append("".join(paragraph_text))
+
+        if not page_break_found:
+            text = "\n".join(pages[0]).strip()
+            if text:
+                yield Document(page_content=text, metadata={"source": self.filepath})
+            return
+
+        for page_index, paragraphs in enumerate(pages):
+            text = "\n".join(paragraphs).strip()
+            if text:
+                yield Document(
+                    page_content=text,
+                    metadata={"source": self.filepath, "page": page_index},
+                )
+
+    def load(self) -> List[Document]:
+        return list(self.lazy_load())
+# End of AI
 
 
 class SafePyPDFLoader:

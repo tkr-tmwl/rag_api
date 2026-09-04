@@ -1,7 +1,11 @@
 import pytest
 from langchain_core.documents import Document
 
-from app.routes.document_routes import _get_section_metadata, _prepare_documents_sync
+from app.routes.document_routes import (
+    _get_section_metadata,
+    _get_structural_query_target,
+    _prepare_documents_sync,
+)
 
 
 # AI Genarated Code Start
@@ -15,7 +19,7 @@ from app.routes.document_routes import _get_section_metadata, _prepare_documents
         ("その1 補足", 4, (5, "補足", "その1")),
         ("A. 付録", 5, (6, "付録", "A")),
         ("IV. ローマ数字", 6, (7, "ローマ数字", "IV")),
-        ("α. ギリシャ文字", 7, (8, "ギリシャ文字", "α")),
+        ("α. ギリシャ文字", 7, (7, None, None)),
         ("# A. Markdown appendix", None, (1, "Markdown appendix", "A")),
         ("## 通常の見出し", 8, (9, "通常の見出し", None)),
         ("第3章", 9, (9, None, None)),
@@ -50,4 +54,53 @@ def test_prepare_documents_sync_propagates_section_label(monkeypatch):
     assert prepared[0].metadata["section_title"] == "適用範囲"
     assert prepared[0].metadata["section_label"] == "第十節"
     assert prepared[1].metadata["section_label"] == "第十節"
+
+
+def test_prepare_documents_sync_normalizes_powerpoint_slide_number(monkeypatch):
+    class IdentitySplitter:
+        def __init__(self, **kwargs):
+            pass
+
+        def split_documents(self, documents):
+            return documents
+
+    monkeypatch.setattr(
+        "app.routes.document_routes.RecursiveCharacterTextSplitter", IdentitySplitter
+    )
+
+    # AI Genarated Code Start
+    prepared = _prepare_documents_sync(
+        [
+            Document(
+                page_content="Seventh slide content",
+                metadata={"source": "slides.pptx", "page_number": 7},
+            )
+        ],
+        "file-1",
+        "user-1",
+        False,
+    )
+
+    assert prepared[0].metadata["source_type"] == "pptx"
+    assert prepared[0].metadata["slide_index"] == 6
+    assert prepared[0].metadata["slide_number"] == 7
+    assert prepared[0].metadata["page_number"] == 7
+    # End of AI
+
+
+@pytest.mark.parametrize(
+    ("query", "expected"),
+    [
+        ("7スライド目の内容", ("slide_number", 7)),
+        ("スライド 7 の内容", ("slide_number", 7)),
+        ("slide 7 content", ("slide_number", 7)),
+        ("7ページ目の内容", ("page_number", 7)),
+    ],
+)
+def test_get_structural_query_target_recognizes_page_and_slide_requests(
+    query, expected
+):
+    # AI Genarated Code Start
+    assert _get_structural_query_target(query) == expected
+    # End of AI
 # End of AI

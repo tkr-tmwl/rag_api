@@ -1,4 +1,5 @@
 import os
+import zipfile
 from collections.abc import Iterator
 from unittest.mock import MagicMock, patch
 
@@ -29,6 +30,51 @@ def test_get_loader_text(tmp_path):
     data = loader.load()
     # Check that data is loaded.
     assert data is not None
+
+
+# AI Genarated Code Start
+def test_docx_loader_preserves_explicit_page_breaks(tmp_path):
+    docx_path = tmp_path / "pages.docx"
+    document_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:body>
+        <w:p><w:r><w:t>First page</w:t></w:r></w:p>
+        <w:p><w:r><w:br w:type="page"/></w:r></w:p>
+        <w:p><w:r><w:t>Second page</w:t></w:r></w:p>
+      </w:body>
+    </w:document>"""
+    with zipfile.ZipFile(docx_path, "w") as docx_file:
+        docx_file.writestr("word/document.xml", document_xml)
+
+    loader, _, _ = get_loader(
+        "pages.docx",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        str(docx_path),
+    )
+    documents = loader.load()
+
+    assert [document.page_content for document in documents] == [
+        "First page",
+        "Second page",
+    ]
+    assert [document.metadata["page"] for document in documents] == [0, 1]
+
+
+def test_docx_loader_does_not_invent_page_numbers_without_page_breaks(tmp_path):
+    docx_path = tmp_path / "single.docx"
+    document_xml = """<?xml version="1.0" encoding="UTF-8"?>
+    <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+      <w:body><w:p><w:r><w:t>Only document text</w:t></w:r></w:p></w:body>
+    </w:document>"""
+    with zipfile.ZipFile(docx_path, "w") as docx_file:
+        docx_file.writestr("word/document.xml", document_xml)
+
+    loader, _, _ = get_loader("single.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", str(docx_path))
+    documents = loader.load()
+
+    assert len(documents) == 1
+    assert "page" not in documents[0].metadata
+# End of AI
 
 
 def test_process_documents():

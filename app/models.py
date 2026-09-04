@@ -31,6 +31,9 @@ class QueryRequestBody(BaseModel):
     file_id: str
     k: int = 4
     entity_id: Optional[str] = None
+    # AI Genarated Code Start
+    fallback_to_semantic: bool = True
+    # End of AI
 
 
 class CleanupMethod(str, Enum):
@@ -50,10 +53,21 @@ class DocumentContextRequest(BaseModel):
 
     file_id: str
     page_number: Optional[int] = Field(default=None, ge=1)
+    # AI Genarated Code Start
+    slide_number: Optional[int] = Field(default=None, ge=1)
+    # End of AI
     section_index: Optional[int] = Field(default=None, ge=1)
     entity_id: Optional[str] = None
 
     def model_post_init(self, __context) -> None:
-        if (self.page_number is None) == (self.section_index is None):
-            raise ValueError("Specify exactly one of page_number or section_index")
+        # AI Genarated Code Start
+        requested_scopes = sum(
+            value is not None
+            for value in (self.page_number, self.slide_number, self.section_index)
+        )
+        if requested_scopes != 1:
+            raise ValueError(
+                "Specify exactly one of page_number, slide_number, or section_index"
+            )
+        # End of AI
 # End of AI

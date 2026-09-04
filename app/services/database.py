@@ -73,6 +73,15 @@ async def ensure_vector_indexes():
             );
         """
         )
+        await conn.execute(
+            f"""
+            CREATE INDEX IF NOT EXISTS idx_{table_name}_file_slide_number
+            ON {table_name} (
+                (cmetadata->>'file_id'),
+                (cmetadata->>'slide_number')
+            );
+        """
+        )
         # End of AI
 
         # Migrate cmetadata from JSON to JSONB (idempotent — skipped if already JSONB).

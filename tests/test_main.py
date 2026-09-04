@@ -216,6 +216,37 @@ def test_query_embeddings_by_explicit_page_returns_structural_context(auth_heade
     # End of AI
 
 
+def test_query_missing_structural_page_falls_back_to_semantic(
+    auth_headers, monkeypatch
+):
+    # AI Genarated Code Start
+    async def no_structural_documents(
+        self, file_id, metadata_field, metadata_value, executor=None
+    ):
+        return []
+
+    monkeypatch.setattr(
+        AsyncPgVector,
+        "get_documents_by_file_metadata",
+        no_structural_documents,
+    )
+    response = client.post(
+        "/query",
+        json={
+            "query": "7ページ目の内容",
+            "file_id": "testid1",
+            "entity_id": "testuser",
+        },
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    document, score = response.json()[0]
+    assert document["page_content"] == "Queried content"
+    assert score == 0.9
+    # End of AI
+
+
 def test_embed_local_file(tmp_path, auth_headers, monkeypatch):
     # Monkeypatch RAG_UPLOAD_DIR so the file is within the allowed directory.
     monkeypatch.setattr(document_routes, "RAG_UPLOAD_DIR", str(tmp_path))

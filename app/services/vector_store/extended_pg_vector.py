@@ -203,7 +203,9 @@ class ExtendedPgVector(PGVector):
         self, file_id: str, metadata_field: str, metadata_value: str | int
     ) -> list[Document]:
         """Return chunks for one metadata value in their original source order."""
-        if metadata_field not in {"page_number", "section_index"}:
+        # AI Genarated Code Start
+        if metadata_field not in {"page_number", "section_index", "slide_number"}:
+        # End of AI
             raise ValueError(f"Unsupported structural metadata field: {metadata_field}")
 
         with Session(self._bind) as session:
